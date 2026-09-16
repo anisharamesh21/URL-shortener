@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, redirect
 import string
 import random
 
@@ -23,6 +23,13 @@ def shorten():
     short_code = generate_short_code(length=6)
     url_map[short_code]=long_url
     return jsonify({"short_code":short_code, "long_url":long_url})
+
+@app.route("/<code>")
+def redirect_to_url(code):
+    if code in url_map:
+        return redirect(url_map[code])
+    else:
+        return "404: Not found"
     
 
 
