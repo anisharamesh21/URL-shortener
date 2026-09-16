@@ -3,12 +3,23 @@ import string
 import random
 from lrucache import LRUCache
 from rate_limiter import RateLimiter
+import sqlite3
 
 app = Flask(__name__)
 
-url_map = {}
 cache = LRUCache(capacity=6)
 limiter = RateLimiter(capacity=3, refill_rate=1)
+
+def init_db():
+    conn = sqlite3.connect("urls.db")
+    cursor = conn.cursor()
+    cursor.execute("""CREATE TABLE IF NOT EXISTS urls(
+                   short_code TEXT PRIMARY KEY,
+                   long_url TEXT NOT NULL
+                   )
+                   """)
+    conn.commit()
+    conn.close()
 
 def generate_short_code(length=6):
     characters = string.ascii_letters + string.digits
@@ -29,7 +40,11 @@ def shorten():
     data = request.get_json()
     long_url = data["url"]
     short_code = generate_short_code(length=6)
-    url_map[short_code]=long_url
+    conn = sqlite3.connect("urls.db")
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO urls (short_code, long_url) VALUES (?, ?)", (short_code, long_url))
+    conn.commit()
+    conn.close()
     cache.put(short_code, long_url)
     return jsonify({"short_code":short_code, "long_url":long_url})
 
@@ -40,12 +55,18 @@ def redirect_to_url(code):
         print("cache hit")
         return redirect(cache_check)
     else:
-        if code in url_map:
+        conn = sqlite3.connect("urls.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT long_url FROM urls WHERE short_code = ?", (code,))
+        result = cursor.fetchone()
+        conn.close()
+        if result != None:
             print("cache miss")
-            cache.put(code, url_map[code])
-            return redirect(url_map[code])
+            long_url = result[0]
+            cache.put(code, long_url)
+            return redirect(long_url)
     return "Not found", 404
     
-
+init_db()
 if __name__ == "__main__":
     app.run(debug=True)
